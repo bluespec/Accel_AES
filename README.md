@@ -4,11 +4,11 @@ Note: under construction (May 28, 2019)
 
 This is a hardware IP, a hardware implementation of AES (Advanced Encryption Standard).  The hardware is designed in the High-Level Hardware Design Language Bluesec BSV, but this repo also contains pre-generated Verilog that can be used immediately as-is.
 
-The IP consists of 3 layers:
+The IP consists of 3 layers in the following top-to-bottom hierarchy:
 
-2. AXI4 master and slave adapter
-1. Generic Memory-to-Memory AES accelerator
-0. AES core
+- Layer 2: AXI4 master and slave adapter
+- Layer 1: Generic Memory-to-Memory AES accelerator
+- Layer 0: AES core
 
 Layer 0 is the inner-most layer (AES core) is just a hardware implementation of AES.  Conceptually, it is an object with 3 methods:
 
