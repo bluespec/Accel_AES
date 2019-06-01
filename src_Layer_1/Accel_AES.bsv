@@ -128,6 +128,8 @@ interface Accel_AES_IFC;
    //                          addr       data         success
    interface Server #(Tuple2 #(Bit #(64), Bit #(64)), Bool)     slave_wr;
 
+   method Bool interrupt_req;
+
    // ----------------
    // Master interface (memory-to-memory IP operations)
    //                 addr                success  data
@@ -176,6 +178,8 @@ module mkAccel_AES (Accel_AES_IFC);
    Reg #(Bit #(64)) rg_src_addr  <- mkRegU;
    Reg #(Bit #(64)) rg_dst_addr  <- mkRegU;
    Reg #(Bit #(64)) rg_n_blocks  <- mkRegU;
+
+   Reg #(Bool) rg_interrupt_req <- mkReg (False);
 
    FIFOF #(Bit #(2)) f_cmd <- mkFIFOF;
 
@@ -226,19 +230,20 @@ module mkAccel_AES (Accel_AES_IFC);
 	 $display ("%0d:%m.rl_wr_config: ERROR: unknown addr 0x%08h", cur_cycle, addr);
       end
       else if (regnum == fromInteger (regnum_cmd)) begin
-	    rg_cmd <= truncate (data);
-	    if (data == fromInteger (cmd_noop)) begin
+	 rg_cmd <= truncate (data);
+	 if (data == fromInteger (cmd_noop)) begin
+	    rg_status <= fromInteger (status_idle);
+	 end
+	 else if (   (data == fromInteger (cmd_key_expand))
+		  || (data == fromInteger (cmd_encrypt))
+		  || (data == fromInteger (cmd_decrypt)))
+	    begin
 	       rg_status <= fromInteger (status_idle);
+	       f_cmd.enq (truncate (data));
 	    end
-	    else if (   (data == fromInteger (cmd_key_expand))
-		     || (data == fromInteger (cmd_encrypt))
-		     || (data == fromInteger (cmd_decrypt)))
-	       begin
-		  rg_status <= fromInteger (status_idle);
-		  f_cmd.enq (truncate (data));
-	       end
-	    else
-	       rg_status <= fromInteger (status_illegal_cmd);
+	 else
+	    rg_status <= fromInteger (status_illegal_cmd);
+	 rg_interrupt_req <= False;
       end
       else if (regnum == fromInteger (regnum_status))    noAction;    // read-only register
       else if (regnum == fromInteger (regnum_key_addr))  rg_key_addr <= data;
@@ -309,8 +314,9 @@ module mkAccel_AES (Accel_AES_IFC);
 		  end
 	       endaction
 	       action
-		  rg_status <= fromInteger (status_idle);
 		  await (aes_e_d.key_ready);
+		  rg_status <= fromInteger (status_idle);
+		  rg_interrupt_req <= True;
 	       endaction
 	    endseq
 	 endpar
@@ -435,7 +441,10 @@ module mkAccel_AES (Accel_AES_IFC);
 	 endpar
 
 	 // Finally, signal successful completion status
-	 rg_status <= fromInteger (status_idle);
+	 action
+	    rg_status <= fromInteger (status_idle);
+	    rg_interrupt_req <= True;
+	 endaction
       endseq);
 
    rule rl_do_command (fsm_key_expand.done
@@ -467,6 +476,7 @@ module mkAccel_AES (Accel_AES_IFC);
    method Action init (Bit #(64) base_addr);
       rg_base_addr <= base_addr;
       rg_status    <= fromInteger (status_idle);
+      rg_interrupt_req <= False;
       rg_cmd       <= fromInteger (cmd_noop);
       f_cmd.clear;
 
@@ -484,6 +494,10 @@ module mkAccel_AES (Accel_AES_IFC);
 
    interface slave_rd = toGPServer (f_slave_rd_reqs, f_slave_rd_rsps);
    interface slave_wr = toGPServer (f_slave_wr_reqs, f_slave_wr_rsps);
+
+   method Bool interrupt_req;
+      return rg_interrupt_req;
+   endmethod
 
    interface master_rd = toGPClient (f_master_rd_reqs, f_master_rd_rsps);
    interface master_wr = toGPClient (f_master_wr_reqs, f_master_wr_rsps);

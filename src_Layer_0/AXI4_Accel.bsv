@@ -273,6 +273,8 @@ module mkAXI4_Accel (AXI4_Accel_IFC);
 
    interface master = master_xactor.axi_side;
    interface slave  = slave_xactor.axi_side;
+
+   method Bool interrupt_req = accel.interrupt_req;
 endmodule
 
 // ================================================================
